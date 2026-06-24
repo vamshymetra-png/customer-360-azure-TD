@@ -4,22 +4,16 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-from config import (
-    RAW_DIR,
-    REFERENCE_DIR,
-    RAW_TABLES,
-    CUSTOMER_COUNT,
-    ACCOUNT_COUNT,
-    CARD_COUNT,
-    LOAN_COUNT,
-    TRANSACTION_COUNT,
-)
+import config as cfg
 from spark_session import get_spark
 from bronze import run_bronze
 from silver import run_silver
 from gold import run_gold
 from audit import write_audit_record
 from data_quality import validate_layer
+from scd_type1 import apply_customer_contact_scd1
+from scd_type2 import apply_customer_risk_scd2
+from schemas import RAW_SCHEMAS, BRONZE_SCHEMAS, SILVER_SCHEMAS, GOLD_SCHEMAS
 
 random.seed(42)
 np.random.seed(42)
@@ -30,8 +24,8 @@ def rand_date(days_back_min=30, days_back_max=3000):
 
 
 def generate_sample_data():
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
+    cfg.RAW_DIR.mkdir(parents=True, exist_ok=True)
+    cfg.REFERENCE_DIR.mkdir(parents=True, exist_ok=True)
 
     first_names = ["Aarav", "Liam", "Noah", "Olivia", "Emma", "Sophia", "Mia", "Ethan", "Lucas", "Amelia", "Mason", "Ava"]
     last_names = ["Patel", "Smith", "Brown", "Singh", "Kumar", "Wilson", "Martin", "Lee", "Chen", "Taylor", "Anderson", "Thomas"]
@@ -39,7 +33,7 @@ def generate_sample_data():
     provinces = ["ON", "QC", "BC", "AB", "MB", "NS"]
 
     customers = []
-    for i in range(1, CUSTOMER_COUNT + 1):
+    for i in range(1, cfg.CUSTOMER_COUNT + 1):
         fn, ln = random.choice(first_names), random.choice(last_names)
         customers.append({
             "customer_id": f"CUST{i:06d}",
@@ -62,7 +56,7 @@ def generate_sample_data():
         })
 
     customers_df = pd.DataFrame(customers)
-    customers_df.to_csv(RAW_DIR / RAW_TABLES["customers"]["file_name"], index=False)
+    customers_df.to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["customers"]["file_name"], index=False)
 
     branches_df = pd.DataFrame([{
         "branch_id": f"BR{i:04d}",
@@ -71,7 +65,7 @@ def generate_sample_data():
         "province": random.choice(provinces),
         "region": random.choice(["East", "Central", "West", "Atlantic"]),
     } for i in range(1, 101)])
-    branches_df.to_csv(RAW_DIR / RAW_TABLES["branches"]["file_name"], index=False)
+    branches_df.to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["branches"]["file_name"], index=False)
 
     customer_ids = customers_df["customer_id"].tolist()
     branch_ids = branches_df["branch_id"].tolist()
@@ -84,10 +78,10 @@ def generate_sample_data():
         "account_balance": round(float(np.random.gamma(3, 2500)), 2),
         "open_date": rand_date(30, 3000),
         "branch_id": random.choice(branch_ids),
-    } for i in range(1, ACCOUNT_COUNT + 1)])
-    accounts_df.to_csv(RAW_DIR / RAW_TABLES["accounts"]["file_name"], index=False)
+    } for i in range(1, cfg.ACCOUNT_COUNT + 1)])
+    accounts_df.to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["accounts"]["file_name"], index=False)
 
-    cards_source = accounts_df.sample(n=CARD_COUNT, random_state=42).reset_index(drop=True)
+    cards_source = accounts_df.sample(n=cfg.CARD_COUNT, random_state=42).reset_index(drop=True)
     cards_df = pd.DataFrame([{
         "card_id": f"CARD{i+1:07d}",
         "customer_id": row["customer_id"],
@@ -97,7 +91,7 @@ def generate_sample_data():
         "credit_limit": float(random.choice([1000, 2500, 5000, 7500, 10000, 15000, 20000])),
         "issue_date": rand_date(30, 1800),
     } for i, row in cards_source.iterrows()])
-    cards_df.to_csv(RAW_DIR / RAW_TABLES["credit_cards"]["file_name"], index=False)
+    cards_df.to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["credit_cards"]["file_name"], index=False)
 
     loans_df = pd.DataFrame([{
         "loan_id": f"LOAN{i:07d}",
@@ -108,9 +102,9 @@ def generate_sample_data():
         "loan_balance": 0.0,
         "interest_rate": round(random.uniform(2.5, 12.5), 2),
         "start_date": rand_date(60, 2200),
-    } for i in range(1, LOAN_COUNT + 1)])
+    } for i in range(1, cfg.LOAN_COUNT + 1)])
     loans_df["loan_balance"] = (loans_df["loan_amount"] * np.random.uniform(0.15, 0.95, size=len(loans_df))).round(2)
-    loans_df.to_csv(RAW_DIR / RAW_TABLES["loans"]["file_name"], index=False)
+    loans_df.to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["loans"]["file_name"], index=False)
 
     merchant_categories = ["grocery", "fuel", "restaurant", "travel", "retail", "utilities", "crypto", "gambling", "foreign_cash", "high_value_electronics"]
     cards_by_customer = cards_df.groupby("customer_id")["card_id"].first().to_dict()
@@ -118,7 +112,7 @@ def generate_sample_data():
     start_dt = datetime.now() - timedelta(days=180)
     transactions = []
 
-    for i in range(1, TRANSACTION_COUNT + 1):
+    for i in range(1, cfg.TRANSACTION_COUNT + 1):
         acc = random.choice(account_rows)
         ts = start_dt + timedelta(days=random.randint(0, 179), hours=random.randint(0, 23), minutes=random.randint(0, 59))
         merchant = random.choices(merchant_categories, weights=[25, 10, 15, 8, 18, 8, 2, 2, 2, 10])[0]
@@ -127,7 +121,7 @@ def generate_sample_data():
         fraud_probability = 0.005
         if amount > 1000:
             fraud_probability += 0.04
-        if merchant in ["crypto", "gambling", "foreign_cash", "high_value_electronics"]:
+        if merchant in cfg.RISKY_MERCHANT_CATEGORIES:
             fraud_probability += 0.03
         if ts.hour <= 5 or ts.hour >= 23:
             fraud_probability += 0.02
@@ -148,24 +142,24 @@ def generate_sample_data():
             "fraud_label": 1 if random.random() < fraud_probability else 0,
         })
 
-    pd.DataFrame(transactions).to_csv(RAW_DIR / RAW_TABLES["transactions"]["file_name"], index=False)
+    pd.DataFrame(transactions).to_csv(cfg.RAW_DIR / cfg.RAW_TABLES["transactions"]["file_name"], index=False)
 
     pd.DataFrame({
         "merchant_category": merchant_categories,
         "risk_weight": [5, 5, 5, 10, 5, 5, 20, 20, 20, 20],
-    }).to_csv(REFERENCE_DIR / "merchant_risk_reference.csv", index=False)
+    }).to_csv(cfg.REFERENCE_DIR / "merchant_risk_reference.csv", index=False)
 
     pd.DataFrame({
         "risk_tier": ["Low", "Medium", "High"],
         "risk_weight": [0, 10, 20],
-    }).to_csv(REFERENCE_DIR / "customer_risk_reference.csv", index=False)
+    }).to_csv(cfg.REFERENCE_DIR / "customer_risk_reference.csv", index=False)
 
 
-def validate_raw_files():
+def validate_raw_files(raw_dir, raw_tables):
     missing = [
         table_config["file_name"]
-        for table_config in RAW_TABLES.values()
-        if not (RAW_DIR / table_config["file_name"]).exists()
+        for table_config in raw_tables.values()
+        if not (raw_dir / table_config["file_name"]).exists()
     ]
     if missing:
         raise FileNotFoundError(
@@ -175,7 +169,7 @@ def validate_raw_files():
 
 def audit_layer(spark, layer, tables, message):
     for name, df in tables.items():
-        write_audit_record(spark, layer, name, df.count(), "SUCCESS", message)
+        write_audit_record(spark, cfg.AUDIT_DIR, layer, name, df.count(), "SUCCESS", message)
 
 
 def print_dq_results(layer, results):
@@ -188,6 +182,18 @@ def print_dq_results(layer, results):
         )
 
 
+def run_layer_dq(spark, layer, tables):
+    results = validate_layer(
+        spark=spark,
+        layer=layer,
+        tables=tables,
+        layer_dq_rules=cfg.LAYER_DQ_RULES,
+        dq_dir=cfg.DQ_DIR,
+    )
+    print_dq_results(layer, results)
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run Customer 360 Azure banking PySpark pipeline.")
     parser.add_argument("--generate-data", action="store_true", help="Regenerate synthetic raw data before pipeline execution.")
@@ -196,32 +202,55 @@ def main():
     if args.generate_data:
         generate_sample_data()
 
-    validate_raw_files()
+    validate_raw_files(cfg.RAW_DIR, cfg.RAW_TABLES)
 
-    spark = get_spark()
+    spark = get_spark(
+        app_name=cfg.APP_NAME,
+        spark_master=cfg.SPARK_MASTER,
+        shuffle_partitions=cfg.SPARK_SHUFFLE_PARTITIONS,
+        arrow_enabled=cfg.SPARK_ARROW_ENABLED,
+        java_home=cfg.JAVA_HOME,
+    )
 
-    bronze = run_bronze(spark)
-    bronze_dq = validate_layer(spark, "bronze", bronze)
-    print_dq_results("bronze", bronze_dq)
-    audit_layer(spark, "bronze", bronze, "Bronze load and data quality checks completed")
+    bronze = run_bronze(
+        spark=spark,
+        raw_dir=cfg.RAW_DIR,
+        bronze_dir=cfg.BRONZE_DIR,
+        raw_tables=cfg.RAW_TABLES,
+        raw_schemas=RAW_SCHEMAS,
+        bronze_schemas=BRONZE_SCHEMAS,
+        source_systems=cfg.SOURCE_SYSTEMS,
+    )
+    run_layer_dq(spark, "bronze", bronze)
+    audit_layer(spark, "bronze", bronze, "Bronze schema enforcement, write, and data quality checks completed")
 
-    silver = run_silver(bronze)
-    silver_dq = validate_layer(spark, "silver", silver)
-    print_dq_results("silver", silver_dq)
+    silver = run_silver(
+        bronze=bronze,
+        silver_dir=cfg.SILVER_DIR,
+        silver_schemas=SILVER_SCHEMAS,
+        customer_contact_scd1_fn=apply_customer_contact_scd1,
+        customer_risk_scd2_fn=apply_customer_risk_scd2,
+    )
+    run_layer_dq(spark, "silver", silver)
     audit_layer(
         spark,
         "silver",
         silver,
-        "Silver transformation, SCD1 customer contact, SCD2 customer risk, and data quality checks completed",
+        "Silver schema enforcement, SCD1 customer contact, SCD2 customer risk, and data quality checks completed",
     )
 
-    gold = run_gold(silver)
-    gold_dq = validate_layer(spark, "gold", gold)
-    print_dq_results("gold", gold_dq)
-    audit_layer(spark, "gold", gold, "Gold, mart, ML scoring, and data quality checks completed")
+    gold = run_gold(
+        silver=silver,
+        gold_dir=cfg.GOLD_DIR,
+        mart_dir=cfg.MART_DIR,
+        gold_schemas=GOLD_SCHEMAS,
+        risky_merchant_categories=cfg.RISKY_MERCHANT_CATEGORIES,
+    )
+    run_layer_dq(spark, "gold", gold)
+    audit_layer(spark, "gold", gold, "Gold/mart schema enforcement, ML scoring, and data quality checks completed")
 
     print("Customer 360 Azure banking pipeline completed successfully.")
-    print("Outputs written under data/sample_outputs.")
+    print(f"Outputs written under {cfg.OUTPUT_DIR}.")
     spark.stop()
 
 

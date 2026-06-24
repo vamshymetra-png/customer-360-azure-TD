@@ -1,9 +1,9 @@
 from datetime import datetime
 from pyspark.sql import Row
-from config import AUDIT_DIR
 
-def write_audit_record(spark, layer, table_name, record_count, status, message):
-    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+
+def write_audit_record(spark, audit_dir, layer, table_name, record_count, status, message):
+    audit_dir.mkdir(parents=True, exist_ok=True)
 
     row = Row(
         audit_ts=datetime.utcnow().isoformat(),
@@ -11,9 +11,9 @@ def write_audit_record(spark, layer, table_name, record_count, status, message):
         table_name=table_name,
         record_count=int(record_count),
         status=status,
-        message=message
+        message=message,
     )
 
     spark.createDataFrame([row]).coalesce(1).write.mode("append").json(
-        str(AUDIT_DIR / "pipeline_audit")
+        str(audit_dir / "pipeline_audit")
     )

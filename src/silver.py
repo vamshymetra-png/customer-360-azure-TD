@@ -1,8 +1,7 @@
 from pyspark.sql import functions as F
 from data_quality import filter_valid_transactions
-from scd_type1 import apply_customer_contact_scd1
-from scd_type2 import apply_customer_risk_scd2
-from config import SILVER_DIR
+from schemas import enforce_schema
+
 
 def standardize_customers(customers):
     return (
@@ -18,6 +17,7 @@ def standardize_customers(customers):
         )
     )
 
+
 def standardize_transactions(transactions):
     return (
         transactions
@@ -27,9 +27,18 @@ def standardize_transactions(transactions):
         .withColumn("mini_batch_id", F.date_format(F.col("transaction_timestamp"), "yyyyMMddHH"))
     )
 
-def run_silver(bronze):
-    SILVER_DIR.mkdir(parents=True, exist_ok=True)
 
+def write_parquet_outputs(outputs, output_dir, output_schemas):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    shaped_outputs = {}
+    for name, df in outputs.items():
+        shaped_df = enforce_schema(df, output_schemas[name])
+        shaped_df.write.mode("overwrite").parquet(str(output_dir / name))
+        shaped_outputs[name] = shaped_df
+    return shaped_outputs
+
+
+def run_silver(bronze, silver_dir, silver_schemas, customer_contact_scd1_fn, customer_risk_scd2_fn):
     customers = standardize_customers(bronze["customers"])
     accounts = bronze["accounts"]
     cards = bronze["credit_cards"]
@@ -37,8 +46,8 @@ def run_silver(bronze):
     transactions = filter_valid_transactions(standardize_transactions(bronze["transactions"]))
     branches = bronze["branches"]
 
-    customer_contact_current = apply_customer_contact_scd1(customers)
-    customer_risk_history = apply_customer_risk_scd2(customers)
+    customer_contact_current = customer_contact_scd1_fn(customers)
+    customer_risk_history = customer_risk_scd2_fn(customers)
 
     enriched_transactions = (
         transactions.alias("t")
@@ -66,10 +75,7 @@ def run_silver(bronze):
         "branches": branches,
         "customer_contact_current": customer_contact_current,
         "customer_risk_history": customer_risk_history,
-        "mini_batch_transaction_summary": mini_batch_transaction_summary
+        "mini_batch_transaction_summary": mini_batch_transaction_summary,
     }
 
-    for name, df in outputs.items():
-        df.write.mode("overwrite").parquet(str(SILVER_DIR / name))
-
-    return outputs
+    return write_parquet_outputs(outputs, silver_dir, silver_schemas)

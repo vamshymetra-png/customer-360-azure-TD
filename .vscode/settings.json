@@ -1,0 +1,10 @@
+{
+  "python.defaultInterpreterPath": "/opt/anaconda3/bin/python",
+  "python.analysis.extraPaths": [
+    "src"
+  ],
+  "terminal.integrated.env.osx": {
+    "JAVA_HOME": "/opt/anaconda3/lib/jvm",
+    "PATH": "/opt/anaconda3/lib/jvm/bin:${env:PATH}"
+  }
+}

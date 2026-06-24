@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 
@@ -43,6 +44,7 @@ APP_NAME = os.getenv("CUSTOMER360_APP_NAME", "Customer360AzureBankingPipeline")
 SPARK_MASTER = os.getenv("CUSTOMER360_SPARK_MASTER", "local[*]")
 SPARK_SHUFFLE_PARTITIONS = os.getenv("CUSTOMER360_SPARK_SHUFFLE_PARTITIONS", "8")
 SPARK_ARROW_ENABLED = os.getenv("CUSTOMER360_SPARK_ARROW_ENABLED", "true")
+JAVA_HOME = os.getenv("JAVA_HOME", str(Path(sys.prefix) / "lib" / "jvm"))
 
 RISKY_MERCHANT_CATEGORIES = [
     "crypto",

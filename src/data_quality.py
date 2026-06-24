@@ -1,6 +1,5 @@
 from datetime import datetime
 from pyspark.sql import functions as F
-from config import DQ_DIR, LAYER_DQ_RULES
 
 
 def check_not_null(df, cols):
@@ -44,8 +43,8 @@ def dq_summary(df, table_name, key_cols, not_null_cols=None, layer=None):
     }
 
 
-def validate_layer(spark, layer, tables, fail_on_error=True, write_report=True):
-    rules = LAYER_DQ_RULES.get(layer, {})
+def validate_layer(spark, layer, tables, layer_dq_rules, dq_dir, fail_on_error=True, write_report=True):
+    rules = layer_dq_rules.get(layer, {})
     results = []
 
     for table_name, df in tables.items():
@@ -66,9 +65,9 @@ def validate_layer(spark, layer, tables, fail_on_error=True, write_report=True):
         return []
 
     if write_report:
-        DQ_DIR.mkdir(parents=True, exist_ok=True)
+        dq_dir.mkdir(parents=True, exist_ok=True)
         spark.createDataFrame(results).coalesce(1).write.mode("append").json(
-            str(DQ_DIR / "pipeline_data_quality")
+            str(dq_dir / "pipeline_data_quality")
         )
 
     failures = [result for result in results if result["status"] != "PASS"]

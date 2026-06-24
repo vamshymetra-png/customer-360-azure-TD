@@ -1,6 +1,5 @@
 from pyspark.sql import functions as F
-from config import BRONZE_DIR, RAW_DIR, RAW_TABLES, SOURCE_SYSTEMS
-from schemas import RAW_SCHEMAS, enforce_schema
+from schemas import enforce_schema
 
 
 def load_csv(spark, path, schema):
@@ -15,16 +14,22 @@ def add_bronze_columns(df, source_system):
     )
 
 
-def run_bronze(spark):
-    BRONZE_DIR.mkdir(parents=True, exist_ok=True)
+def write_parquet_table(df, output_dir, table_name, schema):
+    shaped_df = enforce_schema(df, schema)
+    shaped_df.write.mode("overwrite").parquet(str(output_dir / table_name))
+    return shaped_df
+
+
+def run_bronze(spark, raw_dir, bronze_dir, raw_tables, raw_schemas, bronze_schemas, source_systems):
+    bronze_dir.mkdir(parents=True, exist_ok=True)
 
     bronze = {}
-    for name, table_config in RAW_TABLES.items():
-        schema = RAW_SCHEMAS[name]
-        path = RAW_DIR / table_config["file_name"]
-        df = enforce_schema(load_csv(spark, path, schema), schema)
-        df = add_bronze_columns(df, SOURCE_SYSTEMS[name])
-        df.write.mode("overwrite").parquet(str(BRONZE_DIR / name))
-        bronze[name] = df
+    for name, table_config in raw_tables.items():
+        raw_schema = raw_schemas[name]
+        bronze_schema = bronze_schemas[name]
+        path = raw_dir / table_config["file_name"]
+        df = load_csv(spark, path, raw_schema)
+        df = add_bronze_columns(df, source_systems[name])
+        bronze[name] = write_parquet_table(df, bronze_dir, name, bronze_schema)
 
     return bronze
