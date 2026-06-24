@@ -1,0 +1,67 @@
+{
+  "name": "customer360_databricks_bronze_silver_gold_mart_job",
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "bronze_load",
+      "notebook_task": {
+        "notebook_path": "/Shared/customer360/bronze_load"
+      },
+      "existing_cluster_id": "<cluster-id>"
+    },
+    {
+      "task_key": "silver_transform",
+      "depends_on": [
+        {
+          "task_key": "bronze_load"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/customer360/silver_transform"
+      },
+      "existing_cluster_id": "<cluster-id>"
+    },
+    {
+      "task_key": "scd_processing",
+      "depends_on": [
+        {
+          "task_key": "silver_transform"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/customer360/scd_processing"
+      },
+      "existing_cluster_id": "<cluster-id>"
+    },
+    {
+      "task_key": "fraud_risk_scoring",
+      "depends_on": [
+        {
+          "task_key": "scd_processing"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/customer360/fraud_risk_scoring"
+      },
+      "existing_cluster_id": "<cluster-id>"
+    },
+    {
+      "task_key": "business_mart_publish",
+      "depends_on": [
+        {
+          "task_key": "fraud_risk_scoring"
+        }
+      ],
+      "notebook_task": {
+        "notebook_path": "/Shared/customer360/business_mart_publish"
+      },
+      "existing_cluster_id": "<cluster-id>"
+    }
+  ],
+  "job_clusters": [],
+  "tags": {
+    "project": "customer360",
+    "platform": "azure-databricks",
+    "layer": "bronze-silver-gold"
+  }
+}

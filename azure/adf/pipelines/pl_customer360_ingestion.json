@@ -1,0 +1,65 @@
+{
+  "name": "pl_customer360_ingestion",
+  "properties": {
+    "description": "Parameterized ADF ingestion pipeline for Customer 360 source systems into ADLS Gen2 raw zone.",
+    "parameters": {
+      "sourceSystem": {
+        "type": "String"
+      },
+      "sourceObject": {
+        "type": "String"
+      },
+      "loadDate": {
+        "type": "String"
+      },
+      "rawFolderPath": {
+        "type": "String"
+      },
+      "fileName": {
+        "type": "String"
+      }
+    },
+    "activities": [
+      {
+        "name": "Copy_Source_To_ADLS_Raw",
+        "type": "Copy",
+        "policy": {
+          "timeout": "7.00:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 300
+        },
+        "typeProperties": {
+          "source": {
+            "type": "SqlSource"
+          },
+          "sink": {
+            "type": "DelimitedTextSink"
+          },
+          "enableStaging": false
+        },
+        "inputs": [
+          {
+            "referenceName": "ds_azure_sql_customer",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "ds_adls_raw_transactions",
+            "type": "DatasetReference",
+            "parameters": {
+              "folderPath": "@pipeline().parameters.rawFolderPath",
+              "fileName": "@pipeline().parameters.fileName"
+            }
+          }
+        ]
+      }
+    ],
+    "annotations": [
+      "customer360",
+      "ingestion",
+      "self-hosted-ir",
+      "keyvault"
+    ]
+  }
+}

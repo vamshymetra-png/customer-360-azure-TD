@@ -1,0 +1,34 @@
+{
+  "key_vault_name": "<kv-customer360-env>",
+  "secrets": [
+    {
+      "name": "adls-account-key",
+      "used_by": "ADF ADLS Gen2 linked service"
+    },
+    {
+      "name": "azure-sql-connection-string",
+      "used_by": "ADF Azure SQL linked service"
+    },
+    {
+      "name": "databricks-pat-token",
+      "used_by": "ADF Databricks linked service"
+    },
+    {
+      "name": "synapse-sql-connection-string",
+      "used_by": "Synapse publish step"
+    },
+    {
+      "name": "service-principal-client-id",
+      "used_by": "Databricks ADLS access"
+    },
+    {
+      "name": "service-principal-client-secret",
+      "used_by": "Databricks ADLS access"
+    },
+    {
+      "name": "tenant-id",
+      "used_by": "Databricks ADLS access"
+    }
+  ],
+  "rule": "Do not hardcode secrets in ADF JSON, notebooks, or source code."
+}

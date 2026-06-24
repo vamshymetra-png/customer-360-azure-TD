@@ -1,0 +1,45 @@
+{
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "factoryName": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "string"
+    },
+    "keyVaultBaseUrl": {
+      "type": "string"
+    },
+    "adlsAccountName": {
+      "type": "string"
+    },
+    "databricksWorkspaceUrl": {
+      "type": "string"
+    },
+    "synapseWorkspaceName": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DataFactory/factories",
+      "apiVersion": "2018-06-01",
+      "name": "[parameters('factoryName')]",
+      "location": "[resourceGroup().location]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {}
+    }
+  ],
+  "outputs": {
+    "factoryName": {
+      "type": "string",
+      "value": "[parameters('factoryName')]"
+    },
+    "environment": {
+      "type": "string",
+      "value": "[parameters('environment')]"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+risk_tier,risk_weight
+Low,0
+Medium,10
+High,20

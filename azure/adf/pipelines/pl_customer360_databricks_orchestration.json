@@ -1,0 +1,117 @@
+{
+  "name": "pl_customer360_databricks_orchestration",
+  "properties": {
+    "description": "ADF orchestration pipeline that invokes Databricks notebooks for Bronze, Silver, SCD, Fraud Risk, ML scoring, Gold, and Business Mart publishing.",
+    "parameters": {
+      "environment": {
+        "type": "String"
+      },
+      "loadDate": {
+        "type": "String"
+      },
+      "adlsBasePath": {
+        "type": "String"
+      }
+    },
+    "activities": [
+      {
+        "name": "Run_Bronze_Load",
+        "type": "DatabricksNotebook",
+        "linkedServiceName": {
+          "referenceName": "ls_databricks_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Shared/customer360/bronze_load",
+          "baseParameters": {
+            "environment": "@pipeline().parameters.environment",
+            "load_date": "@pipeline().parameters.loadDate",
+            "adls_base_path": "@pipeline().parameters.adlsBasePath"
+          }
+        }
+      },
+      {
+        "name": "Run_Silver_Transform",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run_Bronze_Load",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "linkedServiceName": {
+          "referenceName": "ls_databricks_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Shared/customer360/silver_transform"
+        }
+      },
+      {
+        "name": "Run_SCD_Processing",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run_Silver_Transform",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "linkedServiceName": {
+          "referenceName": "ls_databricks_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Shared/customer360/scd_processing"
+        }
+      },
+      {
+        "name": "Run_Fraud_Risk_And_ML",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run_SCD_Processing",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "linkedServiceName": {
+          "referenceName": "ls_databricks_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Shared/customer360/fraud_risk_scoring"
+        }
+      },
+      {
+        "name": "Publish_Gold_And_Marts",
+        "type": "DatabricksNotebook",
+        "dependsOn": [
+          {
+            "activity": "Run_Fraud_Risk_And_ML",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ],
+        "linkedServiceName": {
+          "referenceName": "ls_databricks_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": "/Shared/customer360/business_mart_publish"
+        }
+      }
+    ],
+    "annotations": [
+      "customer360",
+      "databricks",
+      "bronze-silver-gold",
+      "business-marts"
+    ]
+  }
+}

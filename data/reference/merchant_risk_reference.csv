@@ -1,0 +1,11 @@
+merchant_category,risk_weight
+grocery,5
+fuel,5
+restaurant,5
+travel,10
+retail,5
+utilities,5
+crypto,20
+gambling,20
+foreign_cash,20
+high_value_electronics,20
